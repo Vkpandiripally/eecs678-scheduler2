@@ -44,6 +44,22 @@ typedef int priority_t; //integer for priority queue
 typedef int sched_t; //integer for sscheduler 
 
 //new_job func job_t* jobNew()
+job_t* jobNew(int job_number, int time, int running_time, int priority) {
+    job_t* newJob = malloc(sizeof(job_t));
+    newJob->job_id = job_number;
+    newJob->time = time;
+    newJob->running_time = running_time;
+    newJob->priority = priority;
+    newJob->busy = 1; // busy job
+
+    // error handling 
+    if (newJob == NULL) {
+        return NULL;
+    }
+
+    return newJob;
+}
+
 
 priority_t getPriorityFCFS(job_t* job){
   return job->time;
@@ -64,12 +80,12 @@ int comparatorFCFS(const void* a, const void* b){
   job_t* job1 = (job_t*)a;
   job_t* job2 = (job_t*)b;
 
-  return getPriorityFCFS(job1) -getPriorityFCFS(job2);
+  return getPriorityFCFS(job1) - getPriorityFCFS(job2);
 }
 
 int comparatorSJF(const void* a, const void* b){
-  job_t* job1 = (job_t* a);
-  job_t* job2 = (job_t* b);
+  job_t* job1 = (job_t*) a;
+  job_t* job2 = (job_t*) b;
 
   int cmp = getPrioritySJF(job1) - getPrioritySJF(job2);
 
@@ -79,11 +95,32 @@ int comparatorSJF(const void* a, const void* b){
 //priorityPRI scheduler
 int comparatorPRIsched(const void* a, const void* b){
   job_t* job1 = (job_t*)a;
-  job_t* jbo2 = (job_t*)b;
+  job_t* job2 = (job_t*)b;
 
   int cmp = getPRISched(job1) - getPRISched(job2);
 
   return cmp == 0 ? comparatorFCFS(a,b) : cmp; 
+}
+
+//PPRI (Preemptive Priority scheduling) comparator 
+int comparatorPPRI(const void* a, const void* b){
+  job_t* job1 = (job_t*)a;
+  job_t* job2 = (job_t*)b;
+
+  int cmp = getPRISched(job1) - getPRISched(job2);
+  
+  if (cmp != 0){
+    return cmp;
+  } else {
+    int runningDiffTime = getPrioritySJF(job1) - getPrioritySJF(job2);
+
+    if (runningDiffTime != 0){
+      return runningDiffTime;
+    } else {
+      return comparatorFCFS(a, b);
+    }
+  }
+
 }
 
 // return priority for RR
@@ -113,6 +150,9 @@ comparator_t getComparator(sched_t scheme){
       break; 
 
     // case PPRI
+    case PPRI:
+      ret = comparatorPPRI;
+      break;
     
     case RR:
       ret = comparatorRR;
@@ -129,13 +169,6 @@ bool isPreemptive(scheme_t scheme){
   return ( scheme == PSJF || scheme == PPRI);
 }
 
-// static int scheduler_cores = 0; /core_id now
-// static scheme_t scheduler_scheme;  // in struct sched_t
-
-//array of cores
-// static job_t *cores_array;
-
-
 /**
   Initalizes the scheduler.
  
@@ -150,22 +183,18 @@ bool isPreemptive(scheme_t scheme){
 */
 void scheduler_start_up(int cores, scheme_t scheme)
 {
-  // scheduler_cores = cores;
-  // scheduler_scheme = scheme; 
+  priqueue_init(&schedy.pq_id, getComparator(scheme));
+  schedy.cores_array = malloc(sizeof(core_t) * cores);
 
-  // cores_array = malloc(sizeof(job_t) * scheduler_cores);
-  // for (int i = 0; i < scheduler_cores; i++){
-  //   cores_array[i].busy = 0;
-  //   cores_array[i].job_id = -1;
-  // }
-  priqueue_init(&schedy.q, getComparator(scheme));
-  schedy.cores = malloc(sizof(core_t) * cores);
+  for(int i = 0; i < cores; i++){
+    schedy.cores_array[i].core_id = i;
+    schedy.cores_array[i].job = NULL;
+  }
 }
 
 
 /**
   Called when a new job arrives.
- 
   If multiple cores are idle, the job should be assigned to the core with the
   lowest id.
   If the job arriving should be scheduled to run during the next
@@ -185,23 +214,50 @@ void scheduler_start_up(int cores, scheme_t scheme)
  */
 int scheduler_new_job(int job_number, int time, int running_time, int priority)
 {
-  //Time is idle, then core assigned with lowest ID
-  for (int i = 0; i < scheduler_cores; i++){
-    if(cores_array[i].busy == 0){
-      cores_array[i].busy = 1;
-      cores_array[i].job_id = job_number;
-      return i; //returns core
+
+  //check idle cores
+  for (int i = 0; i < schedy.cores_array; i++){
+    if (schedy.cores_array[i].job == NULL){
+      schedy.cores_array[i].job = jobNew(job_number, time, running_time, priority);
+      return i;
     }
   }
 
-    //If job is up next on the next time cycle
-  if (running_time < time){
-    // then return 0th index of the core from the job
-    cores_array[0].busy = 1;
-    cores_array[0].job_id = job_number;
-    return 0;  // then prevent the current job
+  // if no idle cores
+  switch (schedy.scheduler_scheme){
+    case FCFS:
+    case SJF:
+    case PSJF:
+      break;
+    case PRI:
+      for (int i = 0; i < schedy.cores_array; i++){
+        if (schedy.cores_array[i].job->priority > priority){
+          job_t* temp = schedy.cores_array[i].job;
+          schedy.cores_array[i].job = jobNew(job_number, time, running_time, priority);
+          free(temp);
+          return i;
+        }
+      }
+      break;
+    case PPRI:
+        int lowestPRI = 0;
+        for (int i = 1; i < schedy.cores_array; i++){
+          if (schedy.cores_array[i].job->priority < schedy.cores_array[lowestPRI].job->priority){
+            lowestPRI = i;
+          }
+        }
+
+        if (schedy.cores_array[lowestPRI].job->priority > priority){
+          job_t* temp = schedy.cores_array[lowestPRI].job;
+          schedy.cores_array[lowestPRI].job = jobNew(job_number, time, running_time, priority);
+          free(temp);
+          return lowestPRI;
+        }
+    case RR:
+    // may need further implementation
   }
-	return -1;
+  return -1;
+
 }
 
 
