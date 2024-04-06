@@ -279,6 +279,38 @@ int scheduler_job_finished(int core_id, int job_number, int time)
 {
   // find core in priority queue that needs to be finished. Highest priority
   // returns job_id to schedule on given core
+  core_t *finished_core = &schedy.cores_array[core_id];
+
+  //free memory
+  free(finished_core->job);
+  finished_core ->job = NULL;
+
+  //Don't schedule non-preemptive jobs immediately
+  if (!isPreemptive(schedy.scheduler_scheme)){
+    return -1;
+  }
+
+  //For preemptive schedulers, find highest priority job and
+  // schedule to the core
+  job_t *highest_priority_job = NULL;
+  int highest_priority = INT_MAX;
+
+  // Traverse the priority queue and find highest priority job
+  for (size_t i = 0; i < priqueue_size(&schedy.pq_id); ++i){
+    job_t *current_job = priqueue_at(&schedy.pq_id, i);
+    if (current_job->priority < highest_priority){
+      highest_priority = current_job->priority;
+      highest_priority_job = current_job;
+    }
+  }
+
+  // return job id if a job is found 
+  if (highest_priority_job != NULL){
+    priqueue_remove_at(&schedy.pq_id, priqueue_at(&schedy.pq_id, highest_priority_job));
+    finished_core->job = highest_priority_job;
+    return highest_priority_job->job_id;
+  }
+
 	return -1;
 }
 
@@ -300,7 +332,33 @@ int scheduler_quantum_expired(int core_id, int time)
 {
   // RR priority queue, see's what jobs needs to be queued on the core
   // check if core is idle 
-	return -1;
+  core_t *expired_core = &schedy.cores_array[core_id];
+
+  //If core is idle, no need to schedule a new job
+  if (expired_core->job == NULL){
+    return -1;
+  }
+
+  //remove current job
+  job_t *current_job = expired_core->job;
+  expired_core->job = NULL;
+
+  //enqueue the current job at the end of priority queue
+  priqueue_offer(&schedy.pq_id, current_job);
+
+  //find the next job
+  job_t *next_job = priqueue_poll(&schedy.pq_id);
+  
+  // if no next job
+  if(next_job == NULL){
+    return -1;
+  }
+	
+  //assign next job
+  expired_core->job = next_job;
+
+  //return job id
+  return next_job->job_id;
 }
 
 
@@ -313,7 +371,23 @@ int scheduler_quantum_expired(int core_id, int time)
  */
 float scheduler_average_waiting_time()
 {
-	return 0.0;
+  int total_waiting_time = 0;
+  int total_jobs = 0;
+  int time = 0;
+
+  //Iterate through all cores to calculate waiting time
+  for (int i = 0; i < schedy.cores_array; i++){
+    job_t *current_job = schedy.cores_array[i].job;
+    if (current_job != NULL){
+      int waiting_time = time - current_job->time; 
+      total_waiting_time += waiting_time;
+      total_jobs++;
+    }
+  }
+
+  float average_waiting_time = (float)total_waiting_time / total_jobs;
+
+	return average_waiting_time;
 }
 
 
@@ -326,7 +400,23 @@ float scheduler_average_waiting_time()
  */
 float scheduler_average_turnaround_time()
 {
-	return 0.0;
+	int total_turnaround_time = 0;
+  int total_jobs = 0;
+  int time = 0;
+
+  //Iterate through all cores to calculate waiting time
+  for (int i = 0; i < schedy.cores_array; i++){
+    job_t *current_job = schedy.cores_array[i].job;
+    if (current_job != NULL){
+      int turnaround_time = time - current_job->time; 
+      total_turnaround_time += turnaround_time;
+      total_jobs++;
+    }
+  }
+
+  float average_turnaround_time = (float)total_turnaround_time / total_jobs;
+
+	return average_turnaround_time;
 }
 
 
@@ -339,7 +429,23 @@ float scheduler_average_turnaround_time()
  */
 float scheduler_average_response_time()
 {
-	return 0.0;
+  int total_response_time = 0;
+  int total_jobs = 0;
+  int time = 0;
+
+  //Iterate through all cores to calculate waiting time
+  for (int i = 0; i < schedy.cores_array; i++){
+    job_t *current_job = schedy.cores_array[i].job;
+    if (current_job != NULL){
+      int response_time = current_job->time - current_job->running_time; 
+      total_response_time += response_time;
+      total_jobs++;
+    }
+  }
+
+  float average_response_time = (float)total_response_time / total_jobs;
+
+	return average_response_time;
 }
 
 
@@ -351,7 +457,17 @@ float scheduler_average_response_time()
 */
 void scheduler_clean_up()
 {
+  if (schedy.cores_array != NULL){
+    free(schedy.cores_array);
+    schedy.cores_array = NULL;
+  }
 
+  while (!priqueue_is_empty(&schedy.pq_id)){
+    job_t *job = priqueue_poll(&schedy.pq_id);
+    free(job); 
+  }
+
+  priqueue_destroy(&schedy.pq_id);
 }
 
 
