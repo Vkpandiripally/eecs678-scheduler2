@@ -15,158 +15,81 @@
 
   You may need to define some global variables or a struct to store your job queue elements. 
 */
+
+priqueue_t queue;
+int preemptive;
+int num_cores;
+int (*comp)(const void *, const void *);
+float wait_time;
+float turnaround_time;
+float response_time;
+int num_jobs;
+int current_time;
+
 typedef struct _job_t{
   int job_id;
-  int time;
+  int arrival_time;
   int running_time;
   int priority;
+  int remaining_time;
+  int start_time;
   int busy; //Idle(0) and busy(1)
 
 } job_t;
 
-typedef struct core_t{
-  int core_id;
-  job_t* job; 
-} core_t;
-
-typedef struct sched_t {
-  scheme_t scheduler_scheme; 
-  core_t* cores_array;
-  priqueue_t pq_id;
-
-  // complete 
-} sched_t;
-
-sched_t schedy;
-
-typedef int(*comparator_t)(const void*, const void*);
-typedef int priority_t; //integer for priority queue 
-typedef int sched_t; //integer for sscheduler 
-
-//new_job func job_t* jobNew()
-job_t* jobNew(int job_number, int time, int running_time, int priority) {
-    job_t* newJob = malloc(sizeof(job_t));
-    newJob->job_id = job_number;
-    newJob->time = time;
-    newJob->running_time = running_time;
-    newJob->priority = priority;
-    newJob->busy = 1; // busy job
-
-    // error handling 
-    if (newJob == NULL) {
-        return NULL;
-    }
-
-    return newJob;
-}
+job_t** core_used;
 
 
-priority_t getPriorityFCFS(job_t* job){
-  return job->time;
-}
-
-// getting priority_scheduler id
-sched_t getPRISched(job_t* job){
-  return job->priority; 
-}
-
-// getting shortest_job first
-priority_t getPrioritySJF(job_t* job){
-  return job->running_time;
-}
-
-//comparators for scheduling algorithms 
-int comparatorFCFS(const void* a, const void* b){
-  job_t* job1 = (job_t*)a;
-  job_t* job2 = (job_t*)b;
-
-  return getPriorityFCFS(job1) - getPriorityFCFS(job2);
-}
-
-int comparatorSJF(const void* a, const void* b){
-  job_t* job1 = (job_t*) a;
-  job_t* job2 = (job_t*) b;
-
-  int cmp = getPrioritySJF(job1) - getPrioritySJF(job2);
-
-  return cmp == 0 ? comparatorFCFS(a,b) : cmp;
-}
-
-//priorityPRI scheduler
-int comparatorPRIsched(const void* a, const void* b){
-  job_t* job1 = (job_t*)a;
-  job_t* job2 = (job_t*)b;
-
-  int cmp = getPRISched(job1) - getPRISched(job2);
-
-  return cmp == 0 ? comparatorFCFS(a,b) : cmp; 
-}
-
-//PPRI (Preemptive Priority scheduling) comparator 
-int comparatorPPRI(const void* a, const void* b){
-  job_t* job1 = (job_t*)a;
-  job_t* job2 = (job_t*)b;
-
-  int cmp = getPRISched(job1) - getPRISched(job2);
-  
-  if (cmp != 0){
-    return cmp;
-  } else {
-    int runningDiffTime = getPrioritySJF(job1) - getPrioritySJF(job2);
-
-    if (runningDiffTime != 0){
-      return runningDiffTime;
-    } else {
-      return comparatorFCFS(a, b);
-    }
+int fcfs_compare(const void *a, const void *b)
+{
+  job_t* job_a = (job_t*)a;
+  job_t* job_b = (job_t*)b;
+  if(job_a -> job_id == job_b -> job_id){
+    return 0;
   }
-
+  return job_a -> arrival_time - job_b -> arrival_time;
 }
 
-// return priority for RR
-int comparatorRR(const void* a, const void* b){
-  //will depend on how priqueue was implemented
-  return -1; 
-}
-
-comparator_t getComparator(sched_t scheme){
-  comparator_t ret = comparatorFCFS;
-
-  switch (scheme) {
-    case FCFS:
-      ret = comparatorFCFS;
-      break;
-    
-    case SJF:
-      ret = comparatorSJF;
-      break;
-
-    case PSJF:
-      ret = comparatorSJF;
-      break;
-
-    case PRI:
-      ret = comparatorPRIsched;
-      break; 
-
-    // case PPRI
-    case PPRI:
-      ret = comparatorPPRI;
-      break;
-    
-    case RR:
-      ret = comparatorRR;
-      break; 
-
-    default:
-      break; 
+int sjf_compare(const void *a, const void *b)
+{
+  job_t* job_a = (job_t*)a;
+  job_t* job_b = (job_t*)b;
+  if(job_a -> job_id == job_b -> job_id){
+    return 0;
   }
-
-  return ret; 
+  int diff = job_a -> remaining_time - job_b -> remaining_time;
+  if(diff == 0){
+    return job_a -> arrival_time - job_b -> arrival_time;
+  }
+  else{
+    return diff;
+  }
 }
 
-bool isPreemptive(scheme_t scheme){
-  return ( scheme == PSJF || scheme == PPRI);
+int pri_compare(const void *a, const void *b)
+{
+  job_t* job_a = (job_t*)a;
+  job_t* job_b = (job_t*)b;
+  if(job_a -> job_id == job_b -> job_id){
+    return 0;
+  }
+  int diff = job_a -> priority - job_b -> priority;
+  if(diff == 0){
+    return job_a -> arrival_time - job_b -> arrival_time;
+  }
+  else{
+    return diff;
+  }
+}
+
+int rr_compare(const void *a, const void *b)
+{
+  job_t* job_a = (job_t*)a;
+  job_t* job_b = (job_t*)b;
+  if(job_a -> job_id == job_b -> job_id){
+    return 0;
+  }
+  return -1;
 }
 
 /**
@@ -183,13 +106,46 @@ bool isPreemptive(scheme_t scheme){
 */
 void scheduler_start_up(int cores, scheme_t scheme)
 {
-  priqueue_init(&schedy.pq_id, getComparator(scheme));
-  schedy.cores_array = malloc(sizeof(core_t) * cores);
+  wait_time = 0.0;
+  turnaround_time = 0.0;
+  response_time = 0.0;
+  num_jobs = 0;
+  current_time = 0;
+  num_cores = cores;
+  core_used = malloc(sizeof(job_t) * cores);
+  int i = 0;
 
-  for(int i = 0; i < cores; i++){
-    schedy.cores_array[i].core_id = i;
-    schedy.cores_array[i].job = NULL;
+  while(i < cores){
+    core_used[i] = 0;
+    i++;
   }
+  switch(scheme){
+      case FCFS: 
+        comp = fcfs_compare; 
+        preemptive = 0; 
+        break;
+    case SJF:  
+        comp = sjf_compare;  
+        preemptive = 0; 
+        break;
+        case PSJF: 
+        comp = sjf_compare;  
+        preemptive = 1; 
+        break;
+        case PRI:  
+        comp = pri_compare;  
+        preemptive = 0; 
+        break;
+        case PPRI: 
+        comp = pri_compare;  
+        preemptive = 1; 
+        break;
+        case RR:   
+        comp = rr_compare;   
+        preemptive = 0; 
+        break;
+  }
+  priqueue_init(&queue, comp);
 }
 
 
@@ -214,50 +170,37 @@ void scheduler_start_up(int cores, scheme_t scheme)
  */
 int scheduler_new_job(int job_number, int time, int running_time, int priority)
 {
+  decrease_remaining_time(time);
+  job_t* job = malloc(sizeof(job_t));
+  job -> job_id = job_number;
+  job -> arrival_time = time;
+  job -> running_time = running_time;
+  job -> priority = priority;
+  job -> remaining_time = running_time;
+  job -> start_time = -1;
 
-  //check idle cores
-  for (int i = 0; i < schedy.cores_array; i++){
-    if (schedy.cores_array[i].job == NULL){
-      schedy.cores_array[i].job = jobNew(job_number, time, running_time, priority);
-      return i;
+  int core = check_idle_core();
+  if(core != -1){
+    core_used[core] = job;
+    job -> start_time = time;
+    return core;
+  }
+
+  if(preemptive){
+    core = lowest_priority_job(job);
+    if(core > -1){
+      job_t* temp = core_used[core];
+      if(time == temp -> start_time){
+        temp -> start_time = -1;
+      }
+      job -> start_time = time;
+      core_used[core] = job;
+      priqueue_offer(&queue, temp);
+      return core;
     }
   }
-
-  // if no idle cores
-  switch (schedy.scheduler_scheme){
-    case FCFS:
-    case SJF:
-    case PSJF:
-      break;
-    case PRI:
-      for (int i = 0; i < schedy.cores_array; i++){
-        if (schedy.cores_array[i].job->priority > priority){
-          job_t* temp = schedy.cores_array[i].job;
-          schedy.cores_array[i].job = jobNew(job_number, time, running_time, priority);
-          free(temp);
-          return i;
-        }
-      }
-      break;
-    case PPRI:
-        int lowestPRI = 0;
-        for (int i = 1; i < schedy.cores_array; i++){
-          if (schedy.cores_array[i].job->priority < schedy.cores_array[lowestPRI].job->priority){
-            lowestPRI = i;
-          }
-        }
-
-        if (schedy.cores_array[lowestPRI].job->priority > priority){
-          job_t* temp = schedy.cores_array[lowestPRI].job;
-          schedy.cores_array[lowestPRI].job = jobNew(job_number, time, running_time, priority);
-          free(temp);
-          return lowestPRI;
-        }
-    case RR:
-    // may need further implementation
-  }
-  return -1;
-
+  priqueue_offer(&queue,(void*)job);
+	return -1;
 }
 
 
@@ -277,40 +220,22 @@ int scheduler_new_job(int job_number, int time, int running_time, int priority)
  */
 int scheduler_job_finished(int core_id, int job_number, int time)
 {
-  // find core in priority queue that needs to be finished. Highest priority
-  // returns job_id to schedule on given core
-  core_t *finished_core = &schedy.cores_array[core_id];
-
-  //free memory
-  free(finished_core->job);
-  finished_core ->job = NULL;
-
-  //Don't schedule non-preemptive jobs immediately
-  if (!isPreemptive(schedy.scheduler_scheme)){
-    return -1;
-  }
-
-  //For preemptive schedulers, find highest priority job and
-  // schedule to the core
-  job_t *highest_priority_job = NULL;
-  int highest_priority = INT_MAX;
-
-  // Traverse the priority queue and find highest priority job
-  for (size_t i = 0; i < priqueue_size(&schedy.pq_id); ++i){
-    job_t *current_job = priqueue_at(&schedy.pq_id, i);
-    if (current_job->priority < highest_priority){
-      highest_priority = current_job->priority;
-      highest_priority_job = current_job;
+  decrease_remaining_time(time);
+  job_t* finished_job = core_used[core_id];
+  num_jobs++;
+  wait_time += (time - finished_job -> arrival_time - finished_job -> running_time);
+  turnaround_time += (time - finished_job -> arrival_time);
+  response_time += (finished_job -> start_time - finished_job -> arrival_time);
+  free(core_used[core_id]);
+  core_used[core_id] = 0;
+  if(priqueue_size(&queue) > 0){
+    job_t* next_job = (job_t*)priqueue_poll(&queue);
+    if(next_job -> start_time == -1){
+      next_job -> start_time = time;
     }
+    core_used[core_id] = next_job;
+    return next_job -> job_id;
   }
-
-  // return job id if a job is found 
-  if (highest_priority_job != NULL){
-    priqueue_remove_at(&schedy.pq_id, priqueue_at(&schedy.pq_id, highest_priority_job));
-    finished_core->job = highest_priority_job;
-    return highest_priority_job->job_id;
-  }
-
 	return -1;
 }
 
@@ -330,35 +255,18 @@ int scheduler_job_finished(int core_id, int job_number, int time)
  */
 int scheduler_quantum_expired(int core_id, int time)
 {
-  // RR priority queue, see's what jobs needs to be queued on the core
-  // check if core is idle 
-  core_t *expired_core = &schedy.cores_array[core_id];
-
-  //If core is idle, no need to schedule a new job
-  if (expired_core->job == NULL){
-    return -1;
+  decrease_remaining_time(time);
+  job_t* expired_job = core_used[core_id];
+  if(priqueue_size(&queue) > 0){
+    priqueue_offer(&queue, expired_job);
+    expired_job = priqueue_poll(&queue);
+    if(expired_job -> start_time == -1){
+      expired_job -> start_time = time;
+    }
+    core_used[core_id] = expired_job;
   }
-
-  //remove current job
-  job_t *current_job = expired_core->job;
-  expired_core->job = NULL;
-
-  //enqueue the current job at the end of priority queue
-  priqueue_offer(&schedy.pq_id, current_job);
-
-  //find the next job
-  job_t *next_job = priqueue_poll(&schedy.pq_id);
-  
-  // if no next job
-  if(next_job == NULL){
-    return -1;
-  }
-	
-  //assign next job
-  expired_core->job = next_job;
-
-  //return job id
-  return next_job->job_id;
+  return expired_job -> job_id;
+	return -1;
 }
 
 
@@ -371,23 +279,10 @@ int scheduler_quantum_expired(int core_id, int time)
  */
 float scheduler_average_waiting_time()
 {
-  int total_waiting_time = 0;
-  int total_jobs = 0;
-  int time = 0;
-
-  //Iterate through all cores to calculate waiting time
-  for (int i = 0; i < schedy.cores_array; i++){
-    job_t *current_job = schedy.cores_array[i].job;
-    if (current_job != NULL){
-      int waiting_time = time - current_job->time; 
-      total_waiting_time += waiting_time;
-      total_jobs++;
-    }
+  if(num_jobs > 0){
+    return wait_time / num_jobs;
   }
-
-  float average_waiting_time = (float)total_waiting_time / total_jobs;
-
-	return average_waiting_time;
+	return 0.0;
 }
 
 
@@ -400,23 +295,10 @@ float scheduler_average_waiting_time()
  */
 float scheduler_average_turnaround_time()
 {
-	int total_turnaround_time = 0;
-  int total_jobs = 0;
-  int time = 0;
-
-  //Iterate through all cores to calculate waiting time
-  for (int i = 0; i < schedy.cores_array; i++){
-    job_t *current_job = schedy.cores_array[i].job;
-    if (current_job != NULL){
-      int turnaround_time = time - current_job->time; 
-      total_turnaround_time += turnaround_time;
-      total_jobs++;
-    }
+  if(num_jobs > 0){
+    return turnaround_time / num_jobs;
   }
-
-  float average_turnaround_time = (float)total_turnaround_time / total_jobs;
-
-	return average_turnaround_time;
+	return 0.0;
 }
 
 
@@ -429,23 +311,13 @@ float scheduler_average_turnaround_time()
  */
 float scheduler_average_response_time()
 {
-  int total_response_time = 0;
-  int total_jobs = 0;
-  int time = 0;
-
-  //Iterate through all cores to calculate waiting time
-  for (int i = 0; i < schedy.cores_array; i++){
-    job_t *current_job = schedy.cores_array[i].job;
-    if (current_job != NULL){
-      int response_time = current_job->time - current_job->running_time; 
-      total_response_time += response_time;
-      total_jobs++;
-    }
+  if(!preemptive && comp != rr_compare){
+    return wait_time / num_jobs;
   }
-
-  float average_response_time = (float)total_response_time / total_jobs;
-
-	return average_response_time;
+  else{
+    return response_time / num_jobs;
+  }
+	return 0.0;
 }
 
 
@@ -457,17 +329,7 @@ float scheduler_average_response_time()
 */
 void scheduler_clean_up()
 {
-  if (schedy.cores_array != NULL){
-    free(schedy.cores_array);
-    schedy.cores_array = NULL;
-  }
-
-  while (!priqueue_is_empty(&schedy.pq_id)){
-    job_t *job = priqueue_poll(&schedy.pq_id);
-    free(job); 
-  }
-
-  priqueue_destroy(&schedy.pq_id);
+  priqueue_destroy(&queue);
 }
 
 
@@ -484,5 +346,52 @@ void scheduler_clean_up()
  */
 void scheduler_show_queue()
 {
+  int x = 0;
+  int size = priqueue_size(&queue);
+  if(size ==0){
+    printf("Queue is empty.");
+    return;
+  }
+  while(x < size){
+    job_t* temp = (job_t*)priqueue_at(&queue, x);
+    printf("Index: %d Job Number:%d Arrival Time: %d Remaining Time: %d Priority: %d\n", x, temp -> job_id, temp -> arrival_time, temp -> remaining_time, temp -> priority);
+    x++;
+  }
+}
 
+int check_idle_core(){
+  int i = 0;
+  while(i < num_cores){
+    if(core_used[i] == 0){
+      return i;
+    }
+    i++;
+  }
+  return -1;
+}
+
+void decrease_remaining_time(int time){
+  int diff_time = (time - current_time);
+  int i = 0;
+  while(i < num_cores){
+    if(core_used[i] != 0){
+      core_used[i] -> remaining_time -= diff_time;
+    }
+    i++;
+  }
+  current_time = time;
+}
+
+int lowest_priority_job(void* job){
+  job_t* current_job = (job_t*)job;
+  int core = -1;
+  int i = 0;
+  while(i < num_cores){
+    if(comp(current_job, core_used[i]) < 0){
+      core = i;
+      current_job = core_used[i];
+    }
+    i++;
+  }
+  return core;
 }
