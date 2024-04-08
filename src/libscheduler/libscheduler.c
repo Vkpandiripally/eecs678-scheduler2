@@ -19,28 +19,26 @@
 priqueue_t queue;
 int preemptive;
 int num_cores;
-int (*comp)(const void *, const void *);
+int num_jobs;
+int current_time;
 float wait_time;
 float turnaround_time;
 float response_time;
-int num_jobs;
-int current_time;
+int (*comp)(const void *, const void *);
 
 typedef struct _job_t{
   int job_id;
+  int priority;
   int arrival_time;
   int running_time;
-  int priority;
   int remaining_time;
   int start_time;
-  int busy; //Idle(0) and busy(1)
-
 } job_t;
 
 job_t** core_used;
 
 
-int fcfs_compare(const void *a, const void *b)
+int comapreFCFS(const void *a, const void *b)
 {
   job_t* job_a = (job_t*)a;
   job_t* job_b = (job_t*)b;
@@ -50,7 +48,7 @@ int fcfs_compare(const void *a, const void *b)
   return job_a -> arrival_time - job_b -> arrival_time;
 }
 
-int sjf_compare(const void *a, const void *b)
+int compareSJF(const void *a, const void *b)
 {
   job_t* job_a = (job_t*)a;
   job_t* job_b = (job_t*)b;
@@ -66,7 +64,7 @@ int sjf_compare(const void *a, const void *b)
   }
 }
 
-int pri_compare(const void *a, const void *b)
+int comparePRI(const void *a, const void *b)
 {
   job_t* job_a = (job_t*)a;
   job_t* job_b = (job_t*)b;
@@ -82,7 +80,7 @@ int pri_compare(const void *a, const void *b)
   }
 }
 
-int rr_compare(const void *a, const void *b)
+int compareRR(const void *a, const void *b)
 {
   job_t* job_a = (job_t*)a;
   job_t* job_b = (job_t*)b;
@@ -121,27 +119,27 @@ void scheduler_start_up(int cores, scheme_t scheme)
   }
   switch(scheme){
       case FCFS: 
-        comp = fcfs_compare; 
+        comp = comapreFCFS; 
         preemptive = 0; 
         break;
     case SJF:  
-        comp = sjf_compare;  
+        comp = compareSJF;  
         preemptive = 0; 
         break;
         case PSJF: 
-        comp = sjf_compare;  
+        comp = compareSJF;  
         preemptive = 1; 
         break;
         case PRI:  
-        comp = pri_compare;  
+        comp = comparePRI;  
         preemptive = 0; 
         break;
         case PPRI: 
-        comp = pri_compare;  
+        comp = comparePRI;  
         preemptive = 1; 
         break;
         case RR:   
-        comp = rr_compare;   
+        comp = compareRR;   
         preemptive = 0; 
         break;
   }
@@ -311,7 +309,7 @@ float scheduler_average_turnaround_time()
  */
 float scheduler_average_response_time()
 {
-  if(!preemptive && comp != rr_compare){
+  if(!preemptive && comp != compareRR){
     return wait_time / num_jobs;
   }
   else{
